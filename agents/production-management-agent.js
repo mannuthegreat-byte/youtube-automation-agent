@@ -583,7 +583,9 @@ class ProductionManagementAgent {
     try {
       const finalVideoPath = path.join(__dirname, '..', 'data', 'videos', `${productionData.id}_final.mp4`);
       const narrationReady = await this.aiVideoGenerator.isUsableAudioFile(productionData.assets.audio?.path);
-      if (!narrationReady && productionData.assets.audio?.intentionalSilence !== true) {
+      // MoneyPrinterTurbo narrates the script itself, so agent-side narration is optional there.
+      const backendNarrates = Boolean(this.aiVideoGenerator.moneyPrinter);
+      if (!narrationReady && !backendNarrates && productionData.assets.audio?.intentionalSilence !== true) {
         this.logger.warn('Final assembly is blocked until narration succeeds or the operator explicitly confirms an intentional silent video.');
         return await this.simulateVideoAssembly(productionData, 'Narration is missing');
       }
@@ -597,7 +599,9 @@ class ProductionManagementAgent {
         {
           jobId: productionData.jobId,
           productionId: productionData.id,
-          estimatedDuration: productionData.estimatedDuration
+          estimatedDuration: productionData.estimatedDuration,
+          narrationText: await this.readNarrationText(productionData),
+          searchTerms: productionData.script?.keywords || productionData.script?.tags
         }
       );
 
@@ -629,6 +633,16 @@ class ProductionManagementAgent {
       this.logger.error('AI video assembly failed:', error);
       // Fallback to simulation
       return await this.simulateVideoAssembly(productionData);
+    }
+  }
+
+  async readNarrationText(productionData) {
+    const ttsPath = productionData.assets?.script?.ttsPath;
+    if (!ttsPath) return null;
+    try {
+      return (await fs.readFile(ttsPath, 'utf8')).trim() || null;
+    } catch {
+      return null;
     }
   }
 

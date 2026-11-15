@@ -79,7 +79,7 @@ Each item links to its walkthrough in the [feature guide](docs/features.md).
 **Produce**
 - [Production readiness](docs/features.md#production-readiness): a verified check of every provider, your channel, and video assembly before anything runs on its own. Paid image and video probes are separate opt-ins.
 - [Resumable generation](docs/features.md#resumable-generation): every stage is checkpointed, so a crash or timeout resumes where it stopped instead of starting over.
-- [AI video generation](docs/features.md#ai-video-generation): local slideshow by default; Seedance, MiniMax H3, Gemini Omni, Kling, or Wan for real clips, with a cap on paid seconds.
+- [AI video generation](docs/features.md#ai-video-generation): local slideshow by default; Seedance, MiniMax H3, Gemini Omni, Kling, or Wan for real clips, with a cap on paid seconds; or a self-hosted [MoneyPrinterTurbo](docs/moneyprinterturbo.md) server for stock-footage videos with subtitles.
 - [Shorts Repurposing Studio](docs/features.md#shorts-repurposing-studio): turn an approved video into three 9:16 Short drafts with burned-in captions, reusing existing media so no new generation credits are spent.
 
 **Review**
@@ -125,6 +125,7 @@ Details are in the [feature guide](docs/features.md#automation-schedule).
 
 - [Feature guide](docs/features.md): a walkthrough of every studio and gate.
 - [AI providers](docs/providers.md): text, narration, image, and video providers with keys and limits.
+- [MoneyPrinterTurbo backend](docs/moneyprinterturbo.md): render videos with a self-hosted MoneyPrinterTurbo server.
 - [API reference](docs/api.md): every HTTP route the dashboard server exposes, for example `POST /generate` with `x-api-key`.
 - [Troubleshooting](docs/troubleshooting.md): fixes for setup, sign-in, and generation problems.
 - [Changelog](CHANGELOG.md) and [releases](https://github.com/darkzOGx/youtube-automation-agent/releases).

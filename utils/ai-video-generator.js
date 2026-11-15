@@ -7,6 +7,7 @@ const sharp = require('sharp');
 const { Logger } = require('./logger');
 const { runFFmpeg, getMediaDuration, checkFFmpeg, ffmpegInstallHint } = require('./ffmpeg');
 const { MediaGenerationService } = require('./media-generation-service');
+const { MoneyPrinterClient, moneyPrinterEnabled, scriptToNarration } = require('./moneyprinter-client');
 
 const OPENAI_IMAGE_MODEL = 'gpt-image-2';
 
@@ -108,6 +109,8 @@ class AIVideoGenerator {
     // Azure Speech configuration
     this.azureSpeechKey = resolvedCredentials.azure?.speechKey || process.env.AZURE_SPEECH_KEY;
     this.azureSpeechRegion = resolvedCredentials.azure?.speechRegion || process.env.AZURE_SPEECH_REGION;
+    this.moneyPrinter = options.moneyPrinter || (moneyPrinterEnabled() ? new MoneyPrinterClient() : null);
+    if (this.moneyPrinter) this.logger.info(`MoneyPrinterTurbo video backend enabled (${this.moneyPrinter.baseUrl})`);
     this.mediaGeneration = options.mediaGeneration || (this.db
       ? new MediaGenerationService(this.db, resolvedCredentials, { logger: this.logger })
       : null);
@@ -404,6 +407,24 @@ class AIVideoGenerator {
     this.logger.info('Generating video from assets...');
     this.lastVideoResult = null;
     try {
+      if (this.moneyPrinter) {
+        const rendered = await this.moneyPrinter.renderVideo({
+          subject: script?.title || options.subject,
+          narration: options.narrationText || scriptToNarration(script),
+          aspect: options.aspectRatio,
+          terms: options.searchTerms,
+          outputPath
+        });
+        this.lastVideoResult = {
+          requestedProvider: 'moneyprinter', actualProvider: 'moneyprinter', model: 'moneyprinterturbo',
+          mode: 'stock-footage', generatedSeconds: 0,
+          tasks: [{ scene: 0, taskId: rendered.taskId, provider: 'moneyprinter', model: 'moneyprinterturbo' }],
+          scenes: [],
+          narration: 'moneyprinter'
+        };
+        return rendered.path;
+      }
+
       if (this.mediaGeneration && options.productionId) {
         const generated = await this.mediaGeneration.generateClips({
           jobId: options.jobId || null,
@@ -448,7 +469,7 @@ class AIVideoGenerator {
       try {
         const produced = await this.generateSlideshowVideo(script, visualAssets, audioPath, outputPath);
         this.lastVideoResult = {
-          requestedProvider: this.lastVideoResult?.requestedProvider || 'configured-provider',
+          requestedProvider: this.lastVideoResult?.requestedProvider || (this.moneyPrinter ? 'moneyprinter' : 'configured-provider'),
           actualProvider: 'slideshow', model: 'local-ffmpeg', mode: 'fallback', generatedSeconds: 0,
           fallbackReason: reason, tasks: [], scenes: []
         };
