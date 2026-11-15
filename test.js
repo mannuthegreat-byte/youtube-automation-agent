@@ -32,6 +32,7 @@ class SystemTest {
       { name: 'Scene-Aware Retention Studio', test: () => this.testSceneAwareRetentionStudio() },
       { name: 'Production Readiness Gate', test: () => this.testProductionReadinessGate() },
       { name: 'Durable Multi-Provider Video Generation', test: () => this.testVideoProviderLayer() },
+      { name: 'MoneyPrinterTurbo Video Backend', test: () => this.testMoneyPrinterBackend() },
       { name: 'Scene Repair Studio', test: () => this.testSceneRepairStudio() },
       { name: 'Narration Reliability and Recovery', test: () => this.testNarrationReliability() },
       { name: 'Shorts Repurposing Studio', test: () => this.testShortsRepurposingStudio() },
@@ -1032,6 +1033,51 @@ class SystemTest {
       await fs.rm(directory, { recursive: true, force: true });
     }
     this.logger.info('Production readiness gate test completed successfully');
+  }
+
+  async testMoneyPrinterBackend() {
+    const os = require('os');
+    const fsp = require('fs').promises;
+    const { Readable } = require('stream');
+    const { MoneyPrinterClient, moneyPrinterEnabled, scriptToNarration } = require('./utils/moneyprinter-client');
+
+    if (!moneyPrinterEnabled({ VIDEO_PROVIDER: 'MoneyPrinter' }) || moneyPrinterEnabled({ VIDEO_PROVIDER: 'slideshow' })) {
+      throw new Error('VIDEO_PROVIDER=moneyprinter detection is wrong');
+    }
+    const narration = scriptToNarration({ hook: { text: 'Hook.' }, mainContent: { sections: [{ content: ['[B-ROLL]', 'Body.'] }] }, conclusion: { finalThought: 'Bye.' } });
+    if (narration !== 'Hook.\nBody.\nBye.') throw new Error(`Unexpected narration: ${JSON.stringify(narration)}`);
+
+    const calls = [];
+    let polls = 0;
+    const http = {
+      post: async (url, body, config) => { calls.push({ url, body, headers: config.headers }); return { data: { data: { task_id: 't1' } } }; },
+      get: async (url, config) => {
+        calls.push({ url, headers: config.headers });
+        if (url.endsWith('/api/v1/tasks/t1')) {
+          polls += 1;
+          return { data: { data: polls < 2 ? { state: 4 } : { state: 1, videos: ['/tasks/t1/final-1.mp4'] } } };
+        }
+        return { status: 200, data: Readable.from([Buffer.from('mp4')]) };
+      }
+    };
+    const client = new MoneyPrinterClient({ env: {}, baseUrl: 'http://mpt:8080/', apiKey: 'k', http, sleep: async () => {} });
+    const outputPath = path.join(os.tmpdir(), `mpt-test-${Date.now()}.mp4`);
+    const result = await client.renderVideo({ subject: 'Topic', narration: 'Text', aspect: '9:16', terms: ['a', 3], outputPath });
+    const saved = await fsp.readFile(outputPath, 'utf8');
+    await fsp.unlink(outputPath);
+    if (result.taskId !== 't1' || saved !== 'mp4') throw new Error('MoneyPrinterTurbo render did not download the finished video');
+    const request = calls[0];
+    if (request.url !== 'http://mpt:8080/api/v1/videos' || request.body.video_aspect !== '9:16' || request.body.video_script !== 'Text') {
+      throw new Error('MoneyPrinterTurbo request was built incorrectly');
+    }
+    if (JSON.stringify(request.body.video_terms) !== '["a"]') throw new Error('Non-string search terms were not filtered');
+    if (calls.at(-1).url !== 'http://mpt:8080/tasks/t1/final-1.mp4' || calls.some(call => call.headers['x-api-key'] !== 'k')) {
+      throw new Error('MoneyPrinterTurbo download URL or API key header is wrong');
+    }
+
+    const failing = new MoneyPrinterClient({ env: {}, http: { ...http, get: async () => ({ data: { data: { state: -1 } } }) }, sleep: async () => {} });
+    const failed = await failing.renderVideo({ subject: 'x', narration: 'y', outputPath }).then(() => false, () => true);
+    if (!failed) throw new Error('A failed MoneyPrinterTurbo task should reject so the slideshow fallback runs');
   }
 
   async testVideoProviderLayer() {
